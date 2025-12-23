@@ -44,7 +44,7 @@ def generate_embedding(embedding_model, image_array):
     return embedding.flatten()
 
 # Query Vector DB
-def get_nearest_neighbors(collection, embedding, top_matches=Top_Matches):
+def nearest_neighbors(collection, embedding, top_matches=Top_Matches):
     results = collection.query(query_embeddings=[embedding], n_results=top_matches)
     labels = results['metadata'][0]
     distances = results['distances'][0]
@@ -52,7 +52,7 @@ def get_nearest_neighbors(collection, embedding, top_matches=Top_Matches):
 
 # Decision Label
 def decision(label, distance, confidence_threshold = Confidence_Threshold):
-    if distance < confidence_threshold:
+    if distance <= confidence_threshold: # cosin distance is used here, so a lower value indicates a better match
         return label
     else:
         return None #return None if the distance is above the confidence threshold
