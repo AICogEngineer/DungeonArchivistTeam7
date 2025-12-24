@@ -3,7 +3,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # Suppress TensorFlow warnings
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers, regularizers
+from keras import layers, regularizers
 
 
 # Constants
@@ -11,7 +11,10 @@ IMG_SIZE = (32, 32)
 BATCH_SIZE = 32
 EMBEDDING_DIM = 128 
 EPOCHS = 100
+SEED = 42
 DATASET_A_PATH = "./dataset_a" 
+
+
 
 def get_path_labels(root_dir):
 
@@ -43,9 +46,11 @@ def get_path_labels(root_dir):
 def load_and_preprocess_image(path, label):
     image = tf.io.read_file(path)
     image = tf.image.decode_png(image, channels=3)
+    image = tf.image.convert_image_dtype(image, tf.float32)
     image = tf.image.resize(image, IMG_SIZE)
     return image, label
 
+'''
 def build_vision_model(num_classes):
     inputs = keras.Input(shape=(32, 32, 3))
     
@@ -79,6 +84,108 @@ def build_vision_model(num_classes):
     outputs = layers.Dense(num_classes, activation='softmax')(x)
     
     return keras.Model(inputs=inputs, outputs=outputs)
+    '''
+
+def build_simple_vision_model(num_classes):
+    model = keras.Sequential(
+        [
+            # Input
+            layers.Input(shape=(32, 32, 3)),
+            
+            # ---- Conv Block 1 ----
+            layers.Conv2D(32, (3, 3), activation='relu', padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.MaxPooling2D((2,2)),
+
+            # ---- Conv Block 2 ----
+            layers.Conv2D(64, (3, 3), activation='relu', padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.MaxPooling2D((2,2)),
+
+            # ---- Conv Block 3 ----
+            layers.Conv2D(128, (3, 3), activation='relu', padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.MaxPooling2D((2,2)),
+
+            #Flatten
+            layers.Flatten(),
+
+            # ---- Embedding Head ----
+            layers.Dense(64, activation='relu', name="embedding_dense"),
+            
+
+            # Classifier
+            layers.Dense(num_classes, activation="softmax"),
+        ]
+    )
+
+    return model
+
+def build_vision_model(num_classes):
+    model = keras.Sequential(
+        [
+            # Input + Augmentation
+            layers.Input(shape=(32, 32, 3)),
+            layers.RandomFlip("horizontal"),
+
+            # Not using bias because BatchNormalization layers have their own bias
+            # Manually call ReLU activation fucntion after BatchNormalization
+            # Max pool after the conv block 
+
+            # ---- Conv Block 1 ----
+            layers.Conv2D(32, (3, 3), padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+
+            layers.Conv2D(32, (3, 3),padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+
+            layers.MaxPooling2D((2,2)),
+
+            # ---- Conv Block 2 ----
+            layers.Conv2D(64, (3, 3), padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+
+            layers.Conv2D(64, (3, 3), padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+
+            layers.MaxPooling2D((2,2)),
+            layers.SpatialDropout2D(0.2),
+
+            # ---- Conv Block 3 ----
+            layers.Conv2D(128, (3, 3), padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+
+            layers.Conv2D(128, (3, 3), padding="same", use_bias=False),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+
+            layers.GlobalAveragePooling2D(),
+
+            # ---- Embedding Head ----
+            layers.Dense(
+                256,
+                use_bias=False,
+                kernel_regularizer=regularizers.l2(1e-4),
+                name="embedding_dense",
+            ),
+            layers.BatchNormalization(),
+            layers.ReLU(name="embedding_out"),
+
+            layers.Dropout(0.4),
+
+            # Classifier
+            layers.Dense(num_classes, activation="softmax"),
+        ],
+    )
+
+    return model
+
+
 
 def run_training():
     # 1. Generate Dynamic Labels
@@ -88,35 +195,48 @@ def run_training():
 
     # 2. Create TF Dataset
     ds = tf.data.Dataset.from_tensor_slices((paths, labels))
-    ds = ds.shuffle(len(paths), reshuffle_each_iteration=False)
+    ds = ds.shuffle(len(paths), seed=SEED, reshuffle_each_iteration=False)
     
-    # Split (80/20)
     val_size = int(len(paths) * 0.2)
     train_ds = ds.skip(val_size)
     val_ds = ds.take(val_size)
 
-    # Map loading function and batch
-    train_ds = train_ds.map(load_and_preprocess_image).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-    val_ds = val_ds.map(load_and_preprocess_image).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+    train_ds = train_ds.map(load_and_preprocess_image, num_parallel_calls=tf.data.AUTOTUNE)
+    train_ds = train_ds.cache()
+    train_ds = train_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+
+    val_ds = val_ds.map(load_and_preprocess_image, num_parallel_calls=tf.data.AUTOTUNE)
+    val_ds = val_ds.cache()
+    val_ds = val_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
     # 3. Build & Train
-    model = build_vision_model(num_classes)
-    optimizer = keras.optimizers.Adam(learning_rate=0.001)
-    model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model = build_simple_vision_model(num_classes)
+    adam_optimizer = keras.optimizers.Adam(learning_rate=0.001)
+    sgd_optimizer = keras.optimizers.SGD(learning_rate=.001, momentum=0.9)
+    model.compile(optimizer=sgd_optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     
     
     early_stop = keras.callbacks.EarlyStopping(
         monitor='val_loss', 
-        patience=5,
+        patience=3,
         restore_best_weights=True 
     )
+
+    lr_schedule = keras.callbacks.ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=0.5,
+        patience=3,
+        min_lr=1e-5,
+        verbose=1
+    )
+
 
     model.fit(
         train_ds, 
         validation_data=val_ds, 
         epochs=EPOCHS, 
-        callbacks=[early_stop]
+        callbacks=[early_stop, lr_schedule]
     )
 
     # 4. Save artifacts
@@ -127,6 +247,8 @@ def run_training():
     #        f.write(f"{name}\n")
 
 if __name__ == "__main__":
+    np.random.seed(SEED)
+    tf.random.set_seed(SEED)
     run_training()
 
 '''
