@@ -12,7 +12,7 @@ from collections import Counter
 import chromadb
 
 # Configuration
-Chaos_Folder = "DatabaseB" # Do not have databas B yet
+Chaos_Folder = "Database_B" # Do not have databas B yet
 Restored_Folder = "./restored_archive" # Stores all sorted files after script processes them
 Review_Folder = "./review_pile" # Files that need review after processing
 Top_Matches = 5 # Number of top matches to consider for sorting
