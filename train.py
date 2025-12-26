@@ -213,21 +213,22 @@ def run_training():
     model = build_simple_vision_model(num_classes)
     adam_optimizer = keras.optimizers.Adam(learning_rate=0.001)
     sgd_optimizer = keras.optimizers.SGD(learning_rate=.001, momentum=0.9)
-    model.compile(optimizer=sgd_optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=adam_optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     
     
     early_stop = keras.callbacks.EarlyStopping(
         monitor='val_loss', 
-        patience=3,
-        restore_best_weights=True 
+        patience=5,
+        restore_best_weights=True,
+        verbose=1
     )
 
     lr_schedule = keras.callbacks.ReduceLROnPlateau(
         monitor="val_loss",
         factor=0.5,
         patience=3,
-        min_lr=1e-5,
+        min_lr=1e-6,
         verbose=1
     )
 

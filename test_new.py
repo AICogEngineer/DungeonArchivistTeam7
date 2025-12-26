@@ -16,6 +16,7 @@ tf.config.experimental.enable_op_determinism()
 # --- Configuration ---
 IMG_SIZE = (32, 32)
 BATCH_SIZE = 32
+DATASET = "./dataset_a" 
 
 def get_optimized_dataset(data_path):
     path_obj = pathlib.Path(data_path)
@@ -45,7 +46,7 @@ def get_optimized_dataset(data_path):
     train_ds = ds.take(train_size).map(load_and_preprocess).cache().batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
     val_ds = ds.skip(train_size).map(load_and_preprocess).cache().batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
-    return train_ds, val_ds, num_classes
+    return train_ds, val_ds, num_classes, train_size
 
 def build_simple_model(num_classes):
     model = keras.Sequential([
@@ -82,34 +83,34 @@ def build_complex_model(num_classes):
             # Max pool after the conv block 
 
             # ---- Conv Block 1 ----
-            layers.Conv2D(32, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(32, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
-            layers.Conv2D(32, (3, 3),padding="same", use_bias=False),
+            layers.Conv2D(32, (3, 3),padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
             layers.MaxPooling2D((2,2)),
 
             # ---- Conv Block 2 ----
-            layers.Conv2D(64, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(64, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
-            layers.Conv2D(64, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(64, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
             layers.MaxPooling2D((2,2)),
-            layers.SpatialDropout2D(0.2),
+            layers.SpatialDropout2D(0.3),
 
             # ---- Conv Block 3 ----
-            layers.Conv2D(128, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(128, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
-            layers.Conv2D(128, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(128, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
@@ -117,15 +118,15 @@ def build_complex_model(num_classes):
 
             # ---- Embedding Head ----
             layers.Dense(
-                256,
+                128,
                 use_bias=False,
                 kernel_regularizer=regularizers.l2(1e-4),
-                name="embedding_dense",
+                name="embedding_dense"
             ),
             layers.BatchNormalization(),
             layers.ReLU(name="embedding_out"),
 
-            layers.Dropout(0.4),
+            layers.Dropout(0.5),
 
             # Classifier
             layers.Dense(num_classes, activation="softmax"),
@@ -134,43 +135,128 @@ def build_complex_model(num_classes):
 
     return model
 
+def make_flatten_model(num_classes):
+    model = keras.Sequential([
+        # --- Input & Augmentation ---
+        layers.Input(shape=(32, 32, 3)),
+        layers.RandomFlip("horizontal"),
+        layers.RandomRotation(0.1),
+        layers.RandomZoom(0.1),
+
+        # --- Conv Block 1 ---
+        layers.Conv2D(32, (3, 3), padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.ReLU(),
+        layers.Conv2D(32, (3, 3), padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.ReLU(),
+        layers.MaxPooling2D((2, 2)),
+
+        # --- Conv Block 2 ---
+        layers.Conv2D(64, (3, 3), padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.ReLU(),
+        layers.Conv2D(64, (3, 3), padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.ReLU(),
+        layers.MaxPooling2D((2, 2)),
+        layers.SpatialDropout2D(0.2),
+
+        # --- Conv Block 3 ---
+        layers.Conv2D(128, (3, 3), padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.ReLU(),
+        layers.Conv2D(128, (3, 3), padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.ReLU(),
+
+        # --- Transition: Flatten instead of GAP ---
+        # Note: If input is 32x32, after two MaxPools, spatial size is 8x8.
+        # Flatten will produce: 8 * 8 * 128 = 8,192 units.
+        layers.Flatten(),
+
+        # --- Embedding Head (Reduced to 64 nodes) ---
+        layers.Dense(
+            64, 
+            use_bias=False,
+            kernel_regularizer=regularizers.l2(1e-4),
+            name="embedding_dense"
+        ),
+        layers.BatchNormalization(),
+        layers.ReLU(name="embedding_out"),
+        
+        layers.Dropout(0.4),
+
+        # --- Classifier ---
+        layers.Dense(num_classes, activation="softmax")
+    ])
+    
+    return model
+
 def run_training(data_path, model_save_path="dungeon_model_v1.keras"):
     """
     Executes the Phase 1 training pipeline: loads data, builds the model, 
     trains with callbacks, and saves the final artifacts.
     """
     
-    train_ds, val_ds, num_classes = get_optimized_dataset(data_path)
-    model = build_simple_model(num_classes)
+    train_ds, val_ds, num_classes, train_size = get_optimized_dataset(data_path)
+    model = build_complex_model(num_classes)
     model.summary()
     early_stop = keras.callbacks.EarlyStopping(
         monitor='val_loss', 
-        patience=5, 
+        patience=15, 
         restore_best_weights=True,
         verbose=1
     )
+
     lr_schedule = keras.callbacks.ReduceLROnPlateau(
         monitor="val_loss",
-        factor=0.5,
+        factor=0.2,
         patience=3,
         min_lr=1e-6,
         verbose=1
     )
 
-    adam_optimizer = keras.optimizers.Adam(learning_rate=0.001)
-    sgd_optimizer = keras.optimizers.SGD(learning_rate=.001, momentum=0.9)
+    sgd_lr_schedule = keras.optimizers.schedules.CosineDecay(
+        initial_learning_rate=0.1,
+        decay_steps=100 * (train_size // BATCH_SIZE),
+        alpha=0.01
+    )  
 
+    '''
+    adam_optimizer = keras.optimizers.Adam(learning_rate=0.001)
     model.compile(
-        optimizer=adam_optimizer,
+            optimizer=adamw_optimizer,
+            loss="sparse_categorical_crossentropy",
+            metrics=["accuracy"]
+    )
+
+    '''
+    '''
+    
+    adamw_optimizer = keras.optimizers.AdamW(learning_rate=0.001, weight_decay=.0001)
+    model.compile(
+        optimizer=adamw_optimizer,
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"]
     )
 
+    
+    '''
+
+    sgd_optimizer = keras.optimizers.SGD(learning_rate=sgd_lr_schedule, momentum=0.9, nesterov=True)
+    model.compile(
+        optimizer=sgd_optimizer,
+        loss="sparse_categorical_crossentropy",
+        metrics=["accuracy"]
+    )
+
+
     history = model.fit(
         train_ds,
         validation_data=val_ds,
-        epochs=50,
-        callbacks=[early_stop, lr_schedule]
+        epochs=100,
+        callbacks=[early_stop]
     )
 
     # 5. Save Artifacts for Phase 2
@@ -182,5 +268,4 @@ def run_training(data_path, model_save_path="dungeon_model_v1.keras"):
 
 if __name__ == "__main__":
     # Ensure the path matches your project structure
-    DATA_ROOT = "./dataset_a" 
-    run_training(DATA_ROOT)
+    run_training(DATASET)
