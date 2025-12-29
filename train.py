@@ -1,127 +1,77 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # Suppress TensorFlow warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+import pathlib
+import datetime
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from keras import layers, regularizers
 
-
 # Constants
+SEED = 42
 IMG_SIZE = (32, 32)
 BATCH_SIZE = 32
-EMBEDDING_DIM = 128 
-EPOCHS = 100
-SEED = 42
-DATASET_A_PATH = "./dataset_a" 
+DATASET = "./dataset_a" 
 
+# Set seed for reproducibility
+keras.utils.set_random_seed(SEED)
+tf.config.experimental.enable_op_determinism()
 
-
-def get_path_labels(root_dir):
-
-    # Crawls subdirectories and creates labels based on the relative path.
-    # Example: 'Equipment/Weapons/Swords' -> 'Equipment_Weapons_Swords'
-    
-    file_paths = []
+def get_optimized_dataset(data_path):
+    # Find image paths/labels
+    path_obj = pathlib.Path(data_path)
+    image_paths = sorted([str(p) for p in path_obj.rglob("*.png")])
     labels = []
-    class_names = []
+    for path in image_paths:
+        rel_p = pathlib.Path(path).relative_to(path_obj)
+        label = "_".join(rel_p.parent.parts) if str(rel_p.parent) != "." else "unlabeled"
+        labels.append(label)
+    label_lookup = layers.StringLookup(output_mode="int")
+    label_lookup.adapt(labels)
+    num_classes = label_lookup.vocabulary_size()
+    class_names = label_lookup.get_vocabulary()
 
-    for root, dirs, files in os.walk(root_dir):
-        if files:
-            # Create a label by joining the path components relative to root
-            rel_path = os.path.relpath(root, root_dir)
-            label_name = rel_path.replace(os.sep, "_")
-            
-            if label_name not in class_names:
-                class_names.append(label_name)
-            
-            label_idx = class_names.index(label_name)
-            
-            for f in files:
-                if f.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    file_paths.append(os.path.join(root, f))
-                    labels.append(label_idx)
+    # Function to load and normalize images
+    def load_and_preprocess(filepath, label_str):
+        img = tf.io.read_file(filepath)
+        img = tf.image.decode_png(img, channels=3)
+        img = tf.image.resize(img, IMG_SIZE)
+        img = tf.cast(img, tf.float32) / 255.0
+        return img, label_lookup(label_str)
 
-    return np.array(file_paths), np.array(labels), class_names
-
-def load_and_preprocess_image(path, label):
-    image = tf.io.read_file(path)
-    image = tf.image.decode_png(image, channels=3)
-    image = tf.image.convert_image_dtype(image, tf.float32)
-    image = tf.image.resize(image, IMG_SIZE)
-    return image, label
-
-'''
-def build_vision_model(num_classes):
-    inputs = keras.Input(shape=(32, 32, 3))
+    ds = tf.data.Dataset.from_tensor_slices((image_paths, labels))
+    ds = ds.shuffle(len(image_paths), seed=SEED, reshuffle_each_iteration=False)
     
-    # Data Augmentation 
-    x = layers.RandomFlip("horizontal")(inputs)
-    x = layers.RandomFlip("vertical")(inputs)
-    
-    x = layers.Rescaling(1./255)(x)
-    
-    # Conv Block 1
-    x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
-    x = layers.MaxPooling2D((2, 2))(x)
-    
-    # Conv Block 2 + Spatial Dropout
-    x = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
-    x = layers.MaxPooling2D((2, 2))(x)
-    x = layers.SpatialDropout2D(0.2)(x) 
-    
-    # Conv Block 3
-    x = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(x)
-    x = layers.MaxPooling2D((2, 2))(x)
-    
-    x = layers.Flatten()(x)
-    
-    # Embedding Layer with L2 Regularization
-    # kernel_regularizer prevents the weights from becoming too large
-    embedding_layer = layers.Dense(EMBEDDING_DIM, activation='relu', name="embedding_out", kernel_regularizer=regularizers.l2(0.001))(x)
-    
-    x = layers.Dropout(0.5)(embedding_layer) 
-    
-    outputs = layers.Dense(num_classes, activation='softmax')(x)
-    
-    return keras.Model(inputs=inputs, outputs=outputs)
-    '''
+    # 80/20 Split
+    train_size = int(0.8 * len(image_paths))
+    train_ds = ds.take(train_size).map(load_and_preprocess).cache().batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+    val_ds = ds.skip(train_size).map(load_and_preprocess).cache().batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
-def build_simple_vision_model(num_classes):
-    model = keras.Sequential(
-        [
-            # Input
-            layers.Input(shape=(32, 32, 3)),
-            
-            # ---- Conv Block 1 ----
-            layers.Conv2D(32, (3, 3), activation='relu', padding="same", use_bias=False),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D((2,2)),
+    return train_ds, val_ds, num_classes, train_size, class_names
 
-            # ---- Conv Block 2 ----
-            layers.Conv2D(64, (3, 3), activation='relu', padding="same", use_bias=False),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D((2,2)),
+def build_simple_model(num_classes):
+    model = keras.Sequential([
+        layers.Input(shape=(32, 32, 3)),
+        
+        layers.Conv2D(32, (3, 3), activation="relu", padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
 
-            # ---- Conv Block 3 ----
-            layers.Conv2D(128, (3, 3), activation='relu', padding="same", use_bias=False),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D((2,2)),
+        layers.Conv2D(64, (3, 3), activation="relu", padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
 
-            #Flatten
-            layers.Flatten(),
-
-            # ---- Embedding Head ----
-            layers.Dense(64, activation='relu', name="embedding_dense"),
-            
-
-            # Classifier
-            layers.Dense(num_classes, activation="softmax"),
-        ]
-    )
-
+        layers.Conv2D(128, (3, 3), activation="relu", padding="same", use_bias=False),
+        layers.BatchNormalization(),
+        layers.GlobalAveragePooling2D(),
+ 
+        layers.Dense(256, activation="relu", name="embedding_out"),
+        layers.Dense(num_classes, activation="softmax")
+    ])
+    
     return model
 
-def build_vision_model(num_classes):
+def build_complex_model(num_classes):
     model = keras.Sequential(
         [
             # Input + Augmentation
@@ -133,34 +83,34 @@ def build_vision_model(num_classes):
             # Max pool after the conv block 
 
             # ---- Conv Block 1 ----
-            layers.Conv2D(32, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(32, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
-            layers.Conv2D(32, (3, 3),padding="same", use_bias=False),
+            layers.Conv2D(32, (3, 3),padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
             layers.MaxPooling2D((2,2)),
 
             # ---- Conv Block 2 ----
-            layers.Conv2D(64, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(64, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
-            layers.Conv2D(64, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(64, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
             layers.MaxPooling2D((2,2)),
-            layers.SpatialDropout2D(0.2),
+            layers.SpatialDropout2D(0.3),
 
             # ---- Conv Block 3 ----
-            layers.Conv2D(128, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(128, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
-            layers.Conv2D(128, (3, 3), padding="same", use_bias=False),
+            layers.Conv2D(128, (3, 3), padding="same", use_bias=False, kernel_initializer="he_normal"),
             layers.BatchNormalization(),
             layers.ReLU(),
 
@@ -171,12 +121,12 @@ def build_vision_model(num_classes):
                 256,
                 use_bias=False,
                 kernel_regularizer=regularizers.l2(1e-4),
-                name="embedding_dense",
+                name="embedding_dense"
             ),
             layers.BatchNormalization(),
             layers.ReLU(name="embedding_out"),
 
-            layers.Dropout(0.4),
+            layers.Dropout(0.5),
 
             # Classifier
             layers.Dense(num_classes, activation="softmax"),
@@ -185,84 +135,92 @@ def build_vision_model(num_classes):
 
     return model
 
-
-
-def run_training():
-    # 1. Generate Dynamic Labels
-    paths, labels, class_names = get_path_labels(DATASET_A_PATH)
-    num_classes = len(class_names) # Dynamically calculated
-    print(f"Detected {num_classes} unique path-based classes.")
-
-    # 2. Create TF Dataset
-    ds = tf.data.Dataset.from_tensor_slices((paths, labels))
-    ds = ds.shuffle(len(paths), seed=SEED, reshuffle_each_iteration=False)
+def run_training(data_path, log, optimizer, model_save_path="dungeon_model_v1.keras"):
+    """
+    Executes the Phase 1 training pipeline: loads data, builds the model, 
+    trains with callbacks, and saves the final artifacts.
+    """
     
-    val_size = int(len(paths) * 0.2)
-    train_ds = ds.skip(val_size)
-    val_ds = ds.take(val_size)
-
-    train_ds = train_ds.map(load_and_preprocess_image, num_parallel_calls=tf.data.AUTOTUNE)
-    train_ds = train_ds.cache()
-    train_ds = train_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-
-    val_ds = val_ds.map(load_and_preprocess_image, num_parallel_calls=tf.data.AUTOTUNE)
-    val_ds = val_ds.cache()
-    val_ds = val_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-
-    # 3. Build & Train
-    model = build_simple_vision_model(num_classes)
-    adam_optimizer = keras.optimizers.Adam(learning_rate=0.001)
-    sgd_optimizer = keras.optimizers.SGD(learning_rate=.001, momentum=0.9)
-    model.compile(optimizer=adam_optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-
-    
-    
+    train_ds, val_ds, num_classes, train_size, class_names = get_optimized_dataset(data_path)
+    model = build_complex_model(num_classes)
+    model.summary()
     early_stop = keras.callbacks.EarlyStopping(
         monitor='val_loss', 
-        patience=5,
+        patience=5, 
         restore_best_weights=True,
         verbose=1
     )
 
     lr_schedule = keras.callbacks.ReduceLROnPlateau(
         monitor="val_loss",
-        factor=0.5,
+        factor=0.2,
         patience=3,
         min_lr=1e-6,
         verbose=1
     )
 
+    sgd_lr_schedule = keras.optimizers.schedules.CosineDecay(
+        initial_learning_rate=0.1,
+        decay_steps=100 * (train_size // BATCH_SIZE),
+        alpha=0.01
+    )  
 
-    model.fit(
-        train_ds, 
-        validation_data=val_ds, 
-        epochs=EPOCHS, 
-        callbacks=[early_stop, lr_schedule]
+
+    if optimizer == "adam":    
+        optimizer = keras.optimizers.Adam(learning_rate=0.001)
+        model.compile(
+                optimizer=optimizer,
+                loss="sparse_categorical_crossentropy",
+                metrics=["accuracy"]
+        )
+        callback_list = [early_stop, lr_schedule]
+
+    elif optimizer == "adamw":
+        optimizer = keras.optimizers.AdamW(learning_rate=0.001, weight_decay=.0001)
+        model.compile(
+            optimizer=optimizer,
+            loss="sparse_categorical_crossentropy",
+            metrics=["accuracy"]
+        )
+        callback_list = [early_stop, lr_schedule]
+    
+    elif optimizer == "sgd":
+        optimizer = keras.optimizers.SGD(learning_rate=sgd_lr_schedule, momentum=0.9, nesterov=True)
+        model.compile(
+            optimizer=optimizer,
+            loss="sparse_categorical_crossentropy",
+            metrics=["accuracy"]
+        )
+        early_stop.patience = 15
+        callback_list = [early_stop]
+
+    if log:
+        callback_list += [tensorboard_callback]
+
+    opt_name = optimizer.__class__.__name__ 
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_dir = f"logs/{opt_name}_{timestamp}"
+    tensorboard_callback = keras.callbacks.TensorBoard(
+        log_dir=log_dir, 
+        histogram_freq=1,
+        update_freq='epoch'
     )
 
-    # 4. Save artifacts
-    # Commented out while testing
-    #model.save("dungeon_model_v1.keras")
+    model.fit(
+        train_ds,
+        validation_data=val_ds,
+        epochs=100,
+        callbacks=callback_list
+    )
+
+    # 5. Save Artifacts for Phase 2
+    # We save the model and the training history for the 'analysis.md' report
+    #model.save(model_save_path)
+    #print(f"--- Model saved to {model_save_path} ---")
     #with open("labels.txt", "w") as f:
     #    for name in class_names:
     #        f.write(f"{name}\n")
 
 if __name__ == "__main__":
-    np.random.seed(SEED)
-    tf.random.set_seed(SEED)
-    run_training()
-
-'''
-Dataset A changes:
-
-Philosophy of changes:
-If there is a folder with only one image, move that image to its parent folder and delete the empty subfolder.
-If there is a folder which is a subtype of the parent folder, but within the parent folder multiple subtypes exists without subtype folders,
-merge the subtype folder with the parent folder.
-
-
-1. Merged the subtype floor_grass with the parent folder floor.
-2. Moved banner to parent folder wall because it was the only image in that folder.
-3. Merged the subtype wall_abyss with the parent folder wall.
-
-'''
+    # Ensure the path matches your project structure
+    run_training(DATASET, log=False, optimizer="adam")
