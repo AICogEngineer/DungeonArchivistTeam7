@@ -6,6 +6,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from keras import layers, regularizers
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 # Constants
 SEED = 42
@@ -48,6 +51,37 @@ def get_optimized_dataset(data_path):
     val_ds = ds.skip(train_size).map(load_and_preprocess).cache().batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
     return train_ds, val_ds, num_classes, train_size, class_names
+
+def plot_evaluation(model, val_ds, class_names):
+    """Generates a confusion matrix and saves it as a PNG."""
+    print("\n--- Generating Confusion Matrix ---")
+    
+    # 1. Get Predictions
+    # model.predict(val_ds) respects the batch order
+    y_probs = model.predict(val_ds)
+    y_pred = np.argmax(y_probs, axis=1)
+    
+    # 2. Get True Labels
+    # We iterate the dataset directly to extract the labels in order
+    y_true = np.concatenate([y for x, y in val_ds], axis=0)
+    
+    # 3. Compute Matrix
+    cm = confusion_matrix(y_true, y_pred)
+    
+    # 4. Plot using Seaborn
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names)
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+    plt.title('Confusion Matrix')
+    
+    # Save and Show
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"confusion_matrix_{timestamp}.png"
+    plt.savefig(filename)
+    print(f"Confusion matrix saved to {filename}")
+    plt.show()
 
 def build_simple_model(num_classes):
     model = keras.Sequential([
@@ -135,15 +169,35 @@ def build_complex_model(num_classes):
 
     return model
 
-def run_training(data_path, log, optimizer, model_save_path="dungeon_model_v1.keras"):
+def run_training(data_path, optimizer, complex_model=True, log=False, save_model=False, visualize_data=False):
     """
     Executes the Phase 1 training pipeline: loads data, builds the model, 
     trains with callbacks, and saves the final artifacts.
     """
+
+    # Get datasets and parameters
     
     train_ds, val_ds, num_classes, train_size, class_names = get_optimized_dataset(data_path)
-    model = build_complex_model(num_classes)
+
+    # Build Model
+    
+    if complex_model:
+        model = build_complex_model(num_classes)
+    else:
+        model = build_simple_model(num_classes)
+    
     model.summary()
+
+    # Custom Cosine Decay for SGD optimizer
+
+    sgd_lr_schedule = keras.optimizers.schedules.CosineDecay(
+        initial_learning_rate=0.1,
+        decay_steps=100 * (train_size // BATCH_SIZE),
+        alpha=0.01
+    )  
+
+    # Callback Definitions
+
     early_stop = keras.callbacks.EarlyStopping(
         monitor='val_loss', 
         patience=5, 
@@ -159,12 +213,7 @@ def run_training(data_path, log, optimizer, model_save_path="dungeon_model_v1.ke
         verbose=1
     )
 
-    sgd_lr_schedule = keras.optimizers.schedules.CosineDecay(
-        initial_learning_rate=0.1,
-        decay_steps=100 * (train_size // BATCH_SIZE),
-        alpha=0.01
-    )  
-
+    # Optimizer Selection and Model Compilation
 
     if optimizer == "adam":    
         optimizer = keras.optimizers.Adam(learning_rate=0.001)
@@ -194,8 +243,7 @@ def run_training(data_path, log, optimizer, model_save_path="dungeon_model_v1.ke
         early_stop.patience = 15
         callback_list = [early_stop]
 
-    if log:
-        callback_list += [tensorboard_callback]
+    #TensorBoard Logging Setup
 
     opt_name = optimizer.__class__.__name__ 
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -206,6 +254,11 @@ def run_training(data_path, log, optimizer, model_save_path="dungeon_model_v1.ke
         update_freq='epoch'
     )
 
+    if log:
+        callback_list += [tensorboard_callback]
+
+    # Model Training
+
     model.fit(
         train_ds,
         validation_data=val_ds,
@@ -213,14 +266,19 @@ def run_training(data_path, log, optimizer, model_save_path="dungeon_model_v1.ke
         callbacks=callback_list
     )
 
-    # 5. Save Artifacts for Phase 2
-    # We save the model and the training history for the 'analysis.md' report
-    #model.save(model_save_path)
-    #print(f"--- Model saved to {model_save_path} ---")
-    #with open("labels.txt", "w") as f:
-    #    for name in class_names:
-    #        f.write(f"{name}\n")
+    # Confusion Matrix Generation
+
+    if visualize_data:
+        plot_evaluation(model, val_ds, class_names)
+
+    # Save Artifacts for Phase 2
+
+    if save_model:
+        model.save("dungeon_model_v1.keras")
+        print(f"--- Model saved to dungeon_model_v1.keras ---")
+        with open("labels.txt", "w") as f:
+            for name in class_names:
+                f.write(f"{name}\n")
 
 if __name__ == "__main__":
-    # Ensure the path matches your project structure
-    run_training(DATASET, log=False, optimizer="adam")
+    run_training(DATASET, optimizer="adam")
