@@ -14,123 +14,282 @@ from collections import Counter
 import chromadb
 
 # Configuration
-Chaos_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\Dataset_B\\chaos_data" # Do not have databas B yet
-Restored_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\restored_archive" # Stores all sorted files after script processes them
-Review_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\review_pile" # Files that need review after processing
-Top_Matches = 5 # Number of top matches to consider for sorting
-Confidence_Threshold = .75 # Minimum confidence level for a match to be considered valid
+Chaos_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\Dataset_B\\chaos_data"
+Restored_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\restored_archive"
+Review_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\review_pile"
+Top_Matches = 5
+Confidence_Threshold = 25.0
 Model_Path = "models/dungeon_model_v1.keras"
-# Path to the pre-trained model
-Embedding_Layer_Name = "embedding_out" # Name of the embedding layer in the model
+Embedding_Layer_Name = "embedding_out"
+
+# Label → Category mapping
+LABEL_TO_CATEGORY = {
+    "Sword": "Weapon",
+    "Dagger": "Weapon",
+    "Axe": "Weapon",
+    "Bow": "Weapon",
+
+    "Wall": "Structure",
+    "Door": "Structure",
+    "Floor": "Structure",
+
+    "Potion": "Item",
+    "Scroll": "Item"
+}
 
 # Connecting To Vector Database
 def connect_to_vector_db():
-    client = chromadb.Client(
-    settings=chromadb.Settings(
-        persist_directory="./chroma"
-    )
-)
+    """Connect to ChromaDB with L2 distance metric"""
+    try:
+        client = chromadb.Client(
+            settings=chromadb.Settings(
+                persist_directory="./chroma"
+            )
+        )
 
-    collection = client.get_or_create_collection(name="dungeondb")
-    return collection
+        # Explicit L2 distance (lower = better)
+        collection = client.get_or_create_collection(
+            name="dungeondb",
+            metadata={"hnsw:space": "l2"}
+        )
+
+        print(f" Connected to Vector DB (total vectors: {collection.count()})")
+        return collection
+    
+    except Exception as e:
+        print(f" Error connecting to Vector DB: {e}")
+        raise
+
 
 # Load Model
-def load_archivist_model(model_path, input_shape=(32,32,3)):
-    # Load the Sequential model
-    model = load_model(model_path)
+def load_archivist_model(model_path, input_shape=(32, 32, 3)):
+    """Load the trained model and extract embedding layer"""
+    try:
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model not found at {model_path}")
+        
+        # Load the Sequential model
+        model = load_model(model_path)
+        
+        # Create a functional Input
+        input_tensor = Input(shape=input_shape)
+        
+        # Pass the input through each layer up to the embedding layer
+        x = input_tensor
+        embedding_found = False
+        for layer in model.layers:
+            x = layer(x)
+            if layer.name == Embedding_Layer_Name:
+                embedding_found = True
+                break
+        
+        if not embedding_found:
+            raise ValueError(f"Embedding layer '{Embedding_Layer_Name}' not found in model")
+        
+        embedding_model = Model(inputs=input_tensor, outputs=x)
+        print(f"Model loaded successfully")
+        return model, embedding_model
     
-    # Create a functional Input
-    input_tensor = Input(shape=input_shape)
-    
-    # Pass the input through each layer of the model up to the embedding layer
-    x = input_tensor
-    for layer in model.layers:
-        x = layer(x)
-        if layer.name == Embedding_Layer_Name:
-            break  # stop at embedding layer
-    
-    embedding_model = Model(inputs=input_tensor, outputs=x)
-    return model, embedding_model
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        raise
 
 
 # Preprocess Image
-def preprocess_image(image_path, target_size = (32, 32)):
-    img = load_img(image_path, target_size=target_size)
-    img_array = img_to_array(img) / 255.0 # Normalizes pixel values (0 - 1)
-    img_array = np.expand_dims(img_array, axis=0)
-    return img_array
+def preprocess_images_batch(image_paths, target_size=(32, 32)):
+    """Load and preprocess a batch of images"""
+    images = []
+    valid_paths = []
+    
+    for path in image_paths:
+        try:
+            img = load_img(path, target_size=target_size)
+            img_array = img_to_array(img) / 255.0
+            images.append(img_array)
+            valid_paths.append(path)
+        except Exception as e:
+            print(f"✗ Error loading {os.path.basename(path)}: {e}")
+            # Move corrupted files to review pile
+            os.makedirs(Review_Folder, exist_ok=True)
+            shutil.move(path, os.path.join(Review_Folder, os.path.basename(path)))
+    
+    return np.array(images), valid_paths
+
 
 # Generate Embedding 
-def generate_embedding(embedding_model, image_array):
-    embedding = embedding_model.predict(image_array)
-    return embedding.flatten()
+def generate_embeddings_batch(embedding_model, images_batch):
+    """Generate embeddings for a batch of images"""
+    embeddings = embedding_model.predict(images_batch, verbose=0)
+    return embeddings.reshape(len(embeddings), -1)
+
 
 # Query Vector DB
-def nearest_neighbors(collection, embedding, top_matches=Top_Matches):
-    results = collection.query(query_embeddings=[embedding], n_results=top_matches)
-    labels = [m['label'] for m in results['metadatas'][0]]
-    distances = results['distances'][0]  # closest first
-    return labels, distances
+def nearest_neighbors_batch(collection, embeddings, top_matches=Top_Matches):
+    """Query vector DB for nearest neighbors in batch"""
+    results = collection.query(
+        query_embeddings=embeddings.tolist(),
+        n_results=top_matches
+    )
+
+    all_labels = []
+    all_distances = []
+
+    for i in range(len(embeddings)):
+        labels = [m['label'] for m in results['metadatas'][i]]
+        distances = results['distances'][i]
+        all_labels.append(labels)
+        all_distances.append(distances)
+
+    return all_labels, all_distances
 
 
 # Decision Label
 def decision(labels, distances, confidence_threshold=Confidence_Threshold):
     """
-    Decide which label to assign based on nearest neighbors and confidence threshold.
+    Phase 2 Decision Logic:
+    1. Confidence check on nearest neighbor
+    2. Distance-weighted voting on LABEL level
+    3. Map winning label to CATEGORY
     """
     if not labels or not distances:
-        return None  # safety check
-
-    top_distance = distances[0]  # distance of the closest match
-
-    
-    if top_distance <= confidence_threshold:
-        vote = Counter(labels)
-        return vote.most_common(1)[0][0]  # most common label
-    else:
         return None
 
+    # Confidence check (nearest neighbor distance)
+    top_distance = distances[0]
+    if top_distance > confidence_threshold:
+        return None  # send to review pile
+
+    # Weighted voting on LABEL level (as per requirements)
+    weighted_votes = {}
+
+    for label, dist in zip(labels, distances):
+        # Weight: closer neighbors vote stronger
+        weight = 1.0 / (dist + 1e-6)
+        weighted_votes[label] = weighted_votes.get(label, 0) + weight
+
+    if not weighted_votes:
+        return None
+
+    # Get winning label
+    winning_label = max(weighted_votes, key=weighted_votes.get)
     
+    # Map label to category
+    category = LABEL_TO_CATEGORY.get(winning_label)
+    
+    return category
+
+
 # Move File
 def move_file(file_path, label):
-    if label is not None:
-        destination_folder = os.path.join(Restored_Folder, label)
-        os.makedirs(destination_folder, exist_ok=True)
-        shutil.move(file_path, os.path.join(destination_folder, os.path.basename(file_path)))
-    else:
-        os.makedirs(Review_Folder, exist_ok=True)
-        shutil.move(file_path, os.path.join(Review_Folder, os.path.basename(file_path)))
+    """Move file to appropriate destination folder"""
+    try:
+        if label is not None:
+            destination_folder = os.path.join(Restored_Folder, label)
+            os.makedirs(destination_folder, exist_ok=True)
+            shutil.move(file_path, os.path.join(destination_folder, os.path.basename(file_path)))
+        else:
+            os.makedirs(Review_Folder, exist_ok=True)
+            shutil.move(file_path, os.path.join(Review_Folder, os.path.basename(file_path)))
+    except Exception as e:
+        print(f" Error moving {os.path.basename(file_path)}: {e}")
+
 
 # Process Chaos Folder
-def process_chaos_folder(Chaos_Folder, embedding_model, collection):
-    for filename in os.listdir(Chaos_Folder):
-        if not filename.endswith(".png"):
+def process_chaos_folder_batch(
+    chaos_folder,
+    embedding_model,
+    collection,
+    batch_size=32
+):
+    """Processing all images in chaos folder using batch processing"""
+    
+    if not os.path.exists(chaos_folder):
+        raise FileNotFoundError(f"Chaos folder not found: {chaos_folder}")
+    
+    filenames = [
+        f for f in os.listdir(chaos_folder)
+        if f.lower().endswith(".png")
+    ]
+
+    if not filenames:
+        print("No PNG files found in chaos folder")
+        return
+
+    print(f"Found {len(filenames)} images to process")
+    
+    total_batches = (len(filenames) + batch_size - 1) // batch_size
+    sorted_count = 0
+    review_count = 0
+
+    for i in range(0, len(filenames), batch_size):
+        batch_files = filenames[i:i + batch_size]
+        batch_paths = [os.path.join(chaos_folder, f) for f in batch_files]
+
+        print(f"Processing batch {i//batch_size + 1}/{total_batches}...", end=" ")
+
+        # Load + preprocess batch
+        images_batch, valid_paths = preprocess_images_batch(batch_paths)
+        
+        if len(images_batch) == 0:
+            print("skipped (no valid images)")
             continue
-        file_path = os.path.join(Chaos_Folder, filename)
-        image_array = preprocess_image(file_path)
-        embedding = generate_embedding(embedding_model, image_array)
-        labels, distances = nearest_neighbors(collection, embedding)
-        final_label = decision(labels, distances)
-        move_file(file_path, final_label)
+
+        # Generate embeddings in ONE forward pass
+        embeddings = generate_embeddings_batch(embedding_model, images_batch)
+
+        # Batch vector search
+        all_labels, all_distances = nearest_neighbors_batch(collection, embeddings)
+
+        # Decide + move files
+        batch_sorted = 0
+        batch_review = 0
+        
+        for path, labels, distances in zip(valid_paths, all_labels, all_distances):
+            final_label = decision(labels, distances)
+            move_file(path, final_label)
+            
+            if final_label is not None:
+                batch_sorted += 1
+            else:
+                batch_review += 1
+        
+        sorted_count += batch_sorted
+        review_count += batch_review
+        
+        print(f" {batch_sorted} sorted, {batch_review} to review")
+
+    
+    print(f"Processing Complete!")
+    print(f"Total sorted: {sorted_count}")
+    print(f"Total needing review: {review_count}")
+   
+
 
 # Main Function
 def main():
-    print("Connecting to Vector Database...")
-    collection = connect_to_vector_db()
+    print("="*50)
+    print("Dungeon Archivist - The Restoration")
+    print("="*50)
+    
+    try:
+        print("\n[1/3] Connecting to Vector Database...")
+        collection = connect_to_vector_db()
 
-    print("Loading Archivist Model...")
-    model, embedding_model = load_archivist_model(Model_Path)
+        print("\n[2/3] Loading Archivist Model...")
+        model, embedding_model = load_archivist_model(Model_Path)
 
-    print("Processing Chaos Folder...")
-    process_chaos_folder(Chaos_Folder, embedding_model, collection)
+        print("\n[3/3] Processing Chaos Folder...")
+        process_chaos_folder_batch(
+            Chaos_Folder,
+            embedding_model,
+            collection,
+            batch_size=32
+        )
+        
+    except Exception as e:
+        print(f"\n✗ Fatal error: {e}")
+        raise
 
-    print("Processing Complete.")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
