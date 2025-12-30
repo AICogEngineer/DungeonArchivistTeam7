@@ -6,31 +6,52 @@
 import os
 import shutil
 import numpy as np
+import tensorflow as tf
 from tensorflow.keras.models import load_model, Model 
+from tensorflow.keras.layers import Input
 from tensorflow.keras.preprocessing.image import img_to_array, load_img
 from collections import Counter
 import chromadb
 
 # Configuration
-Chaos_Folder = "Database_B" # Do not have databas B yet
-Restored_Folder = "./restored_archive" # Stores all sorted files after script processes them
-Review_Folder = "./review_pile" # Files that need review after processing
+Chaos_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\Dataset_B\\chaos_data" # Do not have databas B yet
+Restored_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\restored_archive" # Stores all sorted files after script processes them
+Review_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\review_pile" # Files that need review after processing
 Top_Matches = 5 # Number of top matches to consider for sorting
-Confidence_Threshold = 0.2 # Minimum confidence level for a match to be considered valid
-Model_Path = "path to model" # Path to the pre-trained model
-Embedding_Layer_Name = "embedding" # Name of the embedding layer in the model
+Confidence_Threshold = .75 # Minimum confidence level for a match to be considered valid
+Model_Path = "models/dungeon_model_v1.keras"
+# Path to the pre-trained model
+Embedding_Layer_Name = "embedding_out" # Name of the embedding layer in the model
 
 # Connecting To Vector Database
 def connect_to_vector_db():
-    client = chromadb.Client()
-    collection = client.create_collection(name="Insert ChromaDB NAme Here") #Use CHROMADB Name Here
+    client = chromadb.Client(
+    settings=chromadb.Settings(
+        persist_directory="./chroma"
+    )
+)
+
+    collection = client.get_or_create_collection(name="dungeondb")
     return collection
 
 # Load Model
-def load_archivist_model(model_path):
+def load_archivist_model(model_path, input_shape=(32,32,3)):
+    # Load the Sequential model
     model = load_model(model_path)
-    embedding_model = Model(inputs=model.input, outputs=model.get_layer("embedding").output)
+    
+    # Create a functional Input
+    input_tensor = Input(shape=input_shape)
+    
+    # Pass the input through each layer of the model up to the embedding layer
+    x = input_tensor
+    for layer in model.layers:
+        x = layer(x)
+        if layer.name == Embedding_Layer_Name:
+            break  # stop at embedding layer
+    
+    embedding_model = Model(inputs=input_tensor, outputs=x)
     return model, embedding_model
+
 
 # Preprocess Image
 def preprocess_image(image_path, target_size = (32, 32)):
@@ -47,19 +68,29 @@ def generate_embedding(embedding_model, image_array):
 # Query Vector DB
 def nearest_neighbors(collection, embedding, top_matches=Top_Matches):
     results = collection.query(query_embeddings=[embedding], n_results=top_matches)
-    labels = [m['label'] for m in results['metadatas'][0]] # Extracts labels from the results
-    distances = results['distances'][0]
+    labels = [m['label'] for m in results['metadatas'][0]]
+    distances = results['distances'][0]  # closest first
     return labels, distances
 
-# Decision Label
-def decision(labels, distance, confidence_threshold = Confidence_Threshold):
-    if distance <= confidence_threshold: # Cosine distance is used here, so a lower value indicates a better match
-        return labels 
-    else:
-        return None 
-    vote = Counter(labels) # Counts the occurrences of each label
-    return vote.most_common(1)[0][0] # Returns the most common label
 
+# Decision Label
+def decision(labels, distances, confidence_threshold=Confidence_Threshold):
+    """
+    Decide which label to assign based on nearest neighbors and confidence threshold.
+    """
+    if not labels or not distances:
+        return None  # safety check
+
+    top_distance = distances[0]  # distance of the closest match
+
+    
+    if top_distance <= confidence_threshold:
+        vote = Counter(labels)
+        return vote.most_common(1)[0][0]  # most common label
+    else:
+        return None
+
+    
 # Move File
 def move_file(file_path, label):
     if label is not None:
