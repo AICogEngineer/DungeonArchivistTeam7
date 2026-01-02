@@ -12,54 +12,186 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.preprocessing.image import img_to_array, load_img
 from collections import Counter
 import chromadb
+import pathlib
 
 # Configuration
 Chaos_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\Dataset_B\\chaos_data"
 Restored_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\restored_archive"
 Review_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\review_pile"
 Top_Matches = 5
-Confidence_Threshold = 25.0
+Confidence_Threshold = 2000
 Model_Path = "models/dungeon_model_v1.keras"
 Embedding_Layer_Name = "embedding_out"
 
 # Label → Category mapping
 LABEL_TO_CATEGORY = {
-    "Sword": "Weapon",
-    "Dagger": "Weapon",
-    "Axe": "Weapon",
-    "Bow": "Weapon",
-
-    "Wall": "Structure",
-    "Door": "Structure",
-    "Floor": "Structure",
-
-    "Potion": "Item",
-    "Scroll": "Item"
+    # Dungeon category (17 labels)
+    "dungeon": "dungeon",
+    "dungeon_altars": "dungeon",
+    "dungeon_doors": "dungeon",
+    "dungeon_floor": "dungeon",
+    "dungeon_floor_grass": "dungeon",
+    "dungeon_floor_sigils": "dungeon",
+    "dungeon_gateways": "dungeon",
+    "dungeon_shops": "dungeon",
+    "dungeon_statues": "dungeon",
+    "dungeon_traps": "dungeon",
+    "dungeon_trees": "dungeon",
+    "dungeon_vaults": "dungeon",
+    "dungeon_wall": "dungeon",
+    "dungeon_wall_abyss": "dungeon",
+    "dungeon_wall_banners": "dungeon",
+    "dungeon_wall_torches": "dungeon",
+    "dungeon_water": "dungeon",
+    
+    # Effect category (1 label)
+    "effect": "effect",
+    
+    # Emissaries category (1 label)
+    "emissaries": "emissaries",
+    
+    # GUI category (20 labels)
+    "gui": "gui",
+    "gui_abilities": "gui",
+    "gui_commands": "gui",
+    "gui_invocations": "gui",
+    "gui_skills": "gui",
+    "gui_spells": "gui",
+    "gui_spells_air": "gui",
+    "gui_spells_components": "gui",
+    "gui_spells_conjuration": "gui",
+    "gui_spells_disciplines": "gui",
+    "gui_spells_divination": "gui",
+    "gui_spells_earth": "gui",
+    "gui_spells_enchantment": "gui",
+    "gui_spells_fire": "gui",
+    "gui_spells_ice": "gui",
+    "gui_spells_monster": "gui",
+    "gui_spells_necromancy": "gui",
+    "gui_spells_poison": "gui",
+    "gui_spells_summoning": "gui",
+    "gui_spells_translocation": "gui",
+    "gui_spells_transmutation": "gui",
+    "gui_startup": "gui",
+    "gui_tabs": "gui",
+    
+    # Item category (28 labels)
+    "item_amulet": "item",
+    "item_amulet_artefact": "item",
+    "item_armor_artefact": "item",
+    "item_armor_back": "item",
+    "item_armor_bardings": "item",
+    "item_armor_feet": "item",
+    "item_armor_hands": "item",
+    "item_armor_headgear": "item",
+    "item_armor_shields": "item",
+    "item_armor_torso": "item",
+    "item_book": "item",
+    "item_book_artefact": "item",
+    "item_food": "item",
+    "item_gold": "item",
+    "item_misc": "item",
+    "item_misc_runes": "item",
+    "item_potion": "item",
+    "item_ring": "item",
+    "item_ring_artefact": "item",
+    "item_rod": "item",
+    "item_scroll": "item",
+    "item_staff": "item",
+    "item_wand": "item",
+    "item_weapon": "item",
+    "item_weapon_artefact": "item",
+    "item_weapon_ranged": "item",
+    
+    # Misc category (8 labels)
+    "misc": "misc",
+    "misc_blood": "misc",
+    "misc_brands_bottom_left": "misc",
+    "misc_brands_bottom_right": "misc",
+    "misc_brands_top_left": "misc",
+    "misc_brands_top_right": "misc",
+    "misc_numbers": "misc",
+    
+    # Monster category (31 labels)
+    "monster": "monster",
+    "monster_aberration": "monster",
+    "monster_abyss": "monster",
+    "monster_amorphous": "monster",
+    "monster_animals": "monster",
+    "monster_aquatic": "monster",
+    "monster_demons": "monster",
+    "monster_demonspawn": "monster",
+    "monster_draconic": "monster",
+    "monster_dragons": "monster",
+    "monster_eyes": "monster",
+    "monster_fungi_plants": "monster",
+    "monster_holy": "monster",
+    "monster_nonliving": "monster",
+    "monster_panlord": "monster",
+    "monster_spriggan": "monster",
+    "monster_statues": "monster",
+    "monster_tentacles_eldritch_corners": "monster",
+    "monster_tentacles_eldritch_ends": "monster",
+    "monster_tentacles_kraken_corners": "monster",
+    "monster_tentacles_kraken_ends": "monster",
+    "monster_tentacles_kraken_segments": "monster",
+    "monster_tentacles_starspawn_corners": "monster",
+    "monster_tentacles_starspawn_ends": "monster",
+    "monster_tentacles_starspawn_segments": "monster",
+    "monster_tentacles_vine_corners": "monster",
+    "monster_tentacles_vine_ends": "monster",
+    "monster_tentacles_vine_segments": "monster",
+    "monster_undead": "monster",
+    "monster_undead_simulacra": "monster",
+    "monster_undead_skeletons": "monster",
+    "monster_undead_spectrals": "monster",
+    "monster_undead_zombies": "monster",
+    "monster_unique": "monster",
+    "monster_vault": "monster",
+    
+    # Player category (26 labels)
+    "player_barding": "player",
+    "player_base": "player",
+    "player_beard": "player",
+    "player_body": "player",
+    "player_boots": "player",
+    "player_cloak": "player",
+    "player_draconic_head": "player",
+    "player_draconic_wing": "player",
+    "player_enchantment": "player",
+    "player_felids": "player",
+    "player_gloves": "player",
+    "player_hair": "player",
+    "player_halo": "player",
+    "player_hand_left": "player",
+    "player_hand_left_misc": "player",
+    "player_hand_right": "player",
+    "player_hand_right_artefact": "player",
+    "player_hand_right_misc": "player",
+    "player_head": "player",
+    "player_legs": "player",
+    "player_mutations": "player",
+    "player_transform": "player",
 }
 
 # Connecting To Vector Database
 def connect_to_vector_db():
     """Connect to ChromaDB with L2 distance metric"""
     try:
-        client = chromadb.Client(
-            settings=chromadb.Settings(
-                persist_directory="./chroma"
-            )
+        # Use PersistentClient with absolute path
+        client = chromadb.PersistentClient(
+            path="C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\chroma"
         )
 
-        # Explicit L2 distance (lower = better)
-        collection = client.get_or_create_collection(
-            name="dungeondb",
-            metadata={"hnsw:space": "l2"}
-        )
+        # Get the collection (don't use get_or_create, just get)
+        collection = client.get_collection(name="dungeondb")
 
-        print(f" Connected to Vector DB (total vectors: {collection.count()})")
+        print(f"Connected to Vector DB (total vectors: {collection.count()})")
         return collection
     
     except Exception as e:
-        print(f" Error connecting to Vector DB: {e}")
+        print(f"Error connecting to Vector DB: {e}")
         raise
-
 
 # Load Model
 def load_archivist_model(model_path, input_shape=(32, 32, 3)):
