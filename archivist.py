@@ -24,154 +24,158 @@ Model_Path = "models/dungeon_model_v1.keras"
 Embedding_Layer_Name = "embedding_out"
 
 # Label → Category mapping
+# Label → Category mapping (HIERARCHICAL VERSION)
+# Labels stay as "dungeon_altars", "item_weapon" etc.
+# The move_file function will create nested folders
+
 LABEL_TO_CATEGORY = {
-    # Dungeon category (17 labels)
+    # Dungeon subcategories
     "dungeon": "dungeon",
-    "dungeon_altars": "dungeon",
-    "dungeon_doors": "dungeon",
-    "dungeon_floor": "dungeon",
-    "dungeon_floor_grass": "dungeon",
-    "dungeon_floor_sigils": "dungeon",
-    "dungeon_gateways": "dungeon",
-    "dungeon_shops": "dungeon",
-    "dungeon_statues": "dungeon",
-    "dungeon_traps": "dungeon",
-    "dungeon_trees": "dungeon",
-    "dungeon_vaults": "dungeon",
-    "dungeon_wall": "dungeon",
-    "dungeon_wall_abyss": "dungeon",
-    "dungeon_wall_banners": "dungeon",
-    "dungeon_wall_torches": "dungeon",
-    "dungeon_water": "dungeon",
+    "dungeon_altars": "dungeon_altars",
+    "dungeon_doors": "dungeon_doors",
+    "dungeon_floor": "dungeon_floor",
+    "dungeon_floor_grass": "dungeon_floor_grass",
+    "dungeon_floor_sigils": "dungeon_floor_sigils",
+    "dungeon_gateways": "dungeon_gateways",
+    "dungeon_shops": "dungeon_shops",
+    "dungeon_statues": "dungeon_statues",
+    "dungeon_traps": "dungeon_traps",
+    "dungeon_trees": "dungeon_trees",
+    "dungeon_vaults": "dungeon_vaults",
+    "dungeon_wall": "dungeon_wall",
+    "dungeon_wall_abyss": "dungeon_wall_abyss",
+    "dungeon_wall_banners": "dungeon_wall_banners",
+    "dungeon_wall_torches": "dungeon_wall_torches",
+    "dungeon_water": "dungeon_water",
     
-    # Effect category (1 label)
+    # Effect
     "effect": "effect",
     
-    # Emissaries category (1 label)
+    # Emissaries
     "emissaries": "emissaries",
     
-    # GUI category (20 labels)
+    # GUI subcategories
     "gui": "gui",
-    "gui_abilities": "gui",
-    "gui_commands": "gui",
-    "gui_invocations": "gui",
-    "gui_skills": "gui",
-    "gui_spells": "gui",
-    "gui_spells_air": "gui",
-    "gui_spells_components": "gui",
-    "gui_spells_conjuration": "gui",
-    "gui_spells_disciplines": "gui",
-    "gui_spells_divination": "gui",
-    "gui_spells_earth": "gui",
-    "gui_spells_enchantment": "gui",
-    "gui_spells_fire": "gui",
-    "gui_spells_ice": "gui",
-    "gui_spells_monster": "gui",
-    "gui_spells_necromancy": "gui",
-    "gui_spells_poison": "gui",
-    "gui_spells_summoning": "gui",
-    "gui_spells_translocation": "gui",
-    "gui_spells_transmutation": "gui",
-    "gui_startup": "gui",
-    "gui_tabs": "gui",
+    "gui_abilities": "gui_abilities",
+    "gui_commands": "gui_commands",
+    "gui_invocations": "gui_invocations",
+    "gui_skills": "gui_skills",
+    "gui_spells": "gui_spells",
+    "gui_spells_air": "gui_spells_air",
+    "gui_spells_components": "gui_spells_components",
+    "gui_spells_conjuration": "gui_spells_conjuration",
+    "gui_spells_disciplines": "gui_spells_disciplines",
+    "gui_spells_divination": "gui_spells_divination",
+    "gui_spells_earth": "gui_spells_earth",
+    "gui_spells_enchantment": "gui_spells_enchantment",
+    "gui_spells_fire": "gui_spells_fire",
+    "gui_spells_ice": "gui_spells_ice",
+    "gui_spells_monster": "gui_spells_monster",
+    "gui_spells_necromancy": "gui_spells_necromancy",
+    "gui_spells_poison": "gui_spells_poison",
+    "gui_spells_summoning": "gui_spells_summoning",
+    "gui_spells_translocation": "gui_spells_translocation",
+    "gui_spells_transmutation": "gui_spells_transmutation",
+    "gui_startup": "gui_startup",
+    "gui_tabs": "gui_tabs",
     
-    # Item category (28 labels)
-    "item_amulet": "item",
-    "item_amulet_artefact": "item",
-    "item_armor_artefact": "item",
-    "item_armor_back": "item",
-    "item_armor_bardings": "item",
-    "item_armor_feet": "item",
-    "item_armor_hands": "item",
-    "item_armor_headgear": "item",
-    "item_armor_shields": "item",
-    "item_armor_torso": "item",
-    "item_book": "item",
-    "item_book_artefact": "item",
-    "item_food": "item",
-    "item_gold": "item",
-    "item_misc": "item",
-    "item_misc_runes": "item",
-    "item_potion": "item",
-    "item_ring": "item",
-    "item_ring_artefact": "item",
-    "item_rod": "item",
-    "item_scroll": "item",
-    "item_staff": "item",
-    "item_wand": "item",
-    "item_weapon": "item",
-    "item_weapon_artefact": "item",
-    "item_weapon_ranged": "item",
+    # Item subcategories
+    "item_amulet": "item_amulet",
+    "item_amulet_artefact": "item_amulet_artefact",
+    "item_armor_artefact": "item_armor_artefact",
+    "item_armor_back": "item_armor_back",
+    "item_armor_bardings": "item_armor_bardings",
+    "item_armor_feet": "item_armor_feet",
+    "item_armor_hands": "item_armor_hands",
+    "item_armor_headgear": "item_armor_headgear",
+    "item_armor_shields": "item_armor_shields",
+    "item_armor_torso": "item_armor_torso",
+    "item_book": "item_book",
+    "item_book_artefact": "item_book_artefact",
+    "item_food": "item_food",
+    "item_gold": "item_gold",
+    "item_misc": "item_misc",
+    "item_misc_runes": "item_misc_runes",
+    "item_potion": "item_potion",
+    "item_ring": "item_ring",
+    "item_ring_artefact": "item_ring_artefact",
+    "item_rod": "item_rod",
+    "item_scroll": "item_scroll",
+    "item_staff": "item_staff",
+    "item_wand": "item_wand",
+    "item_weapon": "item_weapon",
+    "item_weapon_artefact": "item_weapon_artefact",
+    "item_weapon_ranged": "item_weapon_ranged",
     
-    # Misc category (8 labels)
+    # Misc subcategories
     "misc": "misc",
-    "misc_blood": "misc",
-    "misc_brands_bottom_left": "misc",
-    "misc_brands_bottom_right": "misc",
-    "misc_brands_top_left": "misc",
-    "misc_brands_top_right": "misc",
-    "misc_numbers": "misc",
+    "misc_blood": "misc_blood",
+    "misc_brands_bottom_left": "misc_brands_bottom_left",
+    "misc_brands_bottom_right": "misc_brands_bottom_right",
+    "misc_brands_top_left": "misc_brands_top_left",
+    "misc_brands_top_right": "misc_brands_top_right",
+    "misc_numbers": "misc_numbers",
     
-    # Monster category (31 labels)
+    # Monster subcategories
     "monster": "monster",
-    "monster_aberration": "monster",
-    "monster_abyss": "monster",
-    "monster_amorphous": "monster",
-    "monster_animals": "monster",
-    "monster_aquatic": "monster",
-    "monster_demons": "monster",
-    "monster_demonspawn": "monster",
-    "monster_draconic": "monster",
-    "monster_dragons": "monster",
-    "monster_eyes": "monster",
-    "monster_fungi_plants": "monster",
-    "monster_holy": "monster",
-    "monster_nonliving": "monster",
-    "monster_panlord": "monster",
-    "monster_spriggan": "monster",
-    "monster_statues": "monster",
-    "monster_tentacles_eldritch_corners": "monster",
-    "monster_tentacles_eldritch_ends": "monster",
-    "monster_tentacles_kraken_corners": "monster",
-    "monster_tentacles_kraken_ends": "monster",
-    "monster_tentacles_kraken_segments": "monster",
-    "monster_tentacles_starspawn_corners": "monster",
-    "monster_tentacles_starspawn_ends": "monster",
-    "monster_tentacles_starspawn_segments": "monster",
-    "monster_tentacles_vine_corners": "monster",
-    "monster_tentacles_vine_ends": "monster",
-    "monster_tentacles_vine_segments": "monster",
-    "monster_undead": "monster",
-    "monster_undead_simulacra": "monster",
-    "monster_undead_skeletons": "monster",
-    "monster_undead_spectrals": "monster",
-    "monster_undead_zombies": "monster",
-    "monster_unique": "monster",
-    "monster_vault": "monster",
+    "monster_aberration": "monster_aberration",
+    "monster_abyss": "monster_abyss",
+    "monster_amorphous": "monster_amorphous",
+    "monster_animals": "monster_animals",
+    "monster_aquatic": "monster_aquatic",
+    "monster_demons": "monster_demons",
+    "monster_demonspawn": "monster_demonspawn",
+    "monster_draconic": "monster_draconic",
+    "monster_dragons": "monster_dragons",
+    "monster_eyes": "monster_eyes",
+    "monster_fungi_plants": "monster_fungi_plants",
+    "monster_holy": "monster_holy",
+    "monster_nonliving": "monster_nonliving",
+    "monster_panlord": "monster_panlord",
+    "monster_spriggan": "monster_spriggan",
+    "monster_statues": "monster_statues",
+    "monster_tentacles_eldritch_corners": "monster_tentacles_eldritch_corners",
+    "monster_tentacles_eldritch_ends": "monster_tentacles_eldritch_ends",
+    "monster_tentacles_kraken_corners": "monster_tentacles_kraken_corners",
+    "monster_tentacles_kraken_ends": "monster_tentacles_kraken_ends",
+    "monster_tentacles_kraken_segments": "monster_tentacles_kraken_segments",
+    "monster_tentacles_starspawn_corners": "monster_tentacles_starspawn_corners",
+    "monster_tentacles_starspawn_ends": "monster_tentacles_starspawn_ends",
+    "monster_tentacles_starspawn_segments": "monster_tentacles_starspawn_segments",
+    "monster_tentacles_vine_corners": "monster_tentacles_vine_corners",
+    "monster_tentacles_vine_ends": "monster_tentacles_vine_ends",
+    "monster_tentacles_vine_segments": "monster_tentacles_vine_segments",
+    "monster_undead": "monster_undead",
+    "monster_undead_simulacra": "monster_undead_simulacra",
+    "monster_undead_skeletons": "monster_undead_skeletons",
+    "monster_undead_spectrals": "monster_undead_spectrals",
+    "monster_undead_zombies": "monster_undead_zombies",
+    "monster_unique": "monster_unique",
+    "monster_vault": "monster_vault",
     
-    # Player category (26 labels)
-    "player_barding": "player",
-    "player_base": "player",
-    "player_beard": "player",
-    "player_body": "player",
-    "player_boots": "player",
-    "player_cloak": "player",
-    "player_draconic_head": "player",
-    "player_draconic_wing": "player",
-    "player_enchantment": "player",
-    "player_felids": "player",
-    "player_gloves": "player",
-    "player_hair": "player",
-    "player_halo": "player",
-    "player_hand_left": "player",
-    "player_hand_left_misc": "player",
-    "player_hand_right": "player",
-    "player_hand_right_artefact": "player",
-    "player_hand_right_misc": "player",
-    "player_head": "player",
-    "player_legs": "player",
-    "player_mutations": "player",
-    "player_transform": "player",
+    # Player subcategories
+    "player_barding": "player_barding",
+    "player_base": "player_base",
+    "player_beard": "player_beard",
+    "player_body": "player_body",
+    "player_boots": "player_boots",
+    "player_cloak": "player_cloak",
+    "player_draconic_head": "player_draconic_head",
+    "player_draconic_wing": "player_draconic_wing",
+    "player_enchantment": "player_enchantment",
+    "player_felids": "player_felids",
+    "player_gloves": "player_gloves",
+    "player_hair": "player_hair",
+    "player_halo": "player_halo",
+    "player_hand_left": "player_hand_left",
+    "player_hand_left_misc": "player_hand_left_misc",
+    "player_hand_right": "player_hand_right",
+    "player_hand_right_artefact": "player_hand_right_artefact",
+    "player_hand_right_misc": "player_hand_right_misc",
+    "player_head": "player_head",
+    "player_legs": "player_legs",
+    "player_mutations": "player_mutations",
+    "player_transform": "player_transform",
 }
 
 # Connecting To Vector Database
@@ -312,14 +316,27 @@ def decision(labels, distances, confidence_threshold=Confidence_Threshold):
 
 
 # Move File
+# Move File - HIERARCHICAL VERSION
 def move_file(file_path, label):
-    """Move file to appropriate destination folder"""
+    """Move file to appropriate nested destination folder"""
     try:
         if label is not None:
-            destination_folder = os.path.join(Restored_Folder, label)
+            # Split label: "dungeon_altars" → ["dungeon", "altars"]
+            parts = label.split('_', 1)
+            
+            if len(parts) == 2:
+                # Nested structure: restored_archive/dungeon/altars/
+                category = parts[0]
+                subcategory = parts[1]
+                destination_folder = os.path.join(Restored_Folder, category, subcategory)
+            else:
+                # Single-level: restored_archive/effect/
+                destination_folder = os.path.join(Restored_Folder, label)
+            
             os.makedirs(destination_folder, exist_ok=True)
             shutil.move(file_path, os.path.join(destination_folder, os.path.basename(file_path)))
         else:
+            # Send to review pile
             os.makedirs(Review_Folder, exist_ok=True)
             shutil.move(file_path, os.path.join(Review_Folder, os.path.basename(file_path)))
     except Exception as e:

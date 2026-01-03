@@ -64,7 +64,7 @@ def populate_chromadb(dataset_path, embedding_model):
     print(f"Created/verified directory: {CHROMA_PATH}")
     
     # Connect to ChromaDB with persistence
-    client = chromadb.PersistentClient(path=CHROMA_PATH)  # ✅ Use PersistentClient!
+    client = chromadb.PersistentClient(path=CHROMA_PATH)  # Use PersistentClient!
     print(f"Connected to ChromaDB at: {CHROMA_PATH}")
     
     # Delete existing collection if it exists (fresh start)
