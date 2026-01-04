@@ -13,14 +13,15 @@ from tensorflow.keras.preprocessing.image import img_to_array, load_img
 from collections import Counter
 import chromadb
 import pathlib
+from PIL import Image
 
 # Configuration
-Chaos_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\Dataset_B\\chaos_data"
-Restored_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\restored_archive"
-Review_Folder = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\review_pile"
+Chaos_Folder = "./Dataset_B/chaos_data"
+Restored_Folder = "./restored_archive"
+Review_Folder = "./review_pile"
 Top_Matches = 5
 Confidence_Threshold = 2000
-Model_Path = "models/dungeon_model_v1.keras"
+Model_Path = "models/dungeon_model_v3.keras"
 Embedding_Layer_Name = "embedding_out"
 
 # Label → Category mapping
@@ -184,7 +185,7 @@ def connect_to_vector_db():
     try:
         # Use PersistentClient with absolute path
         client = chromadb.PersistentClient(
-            path="C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\chroma"
+            path="./chroma"
         )
 
         # Get the collection (don't use get_or_create, just get)

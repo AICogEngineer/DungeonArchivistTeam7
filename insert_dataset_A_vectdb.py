@@ -9,12 +9,12 @@ import chromadb
 import pathlib
 
 # Configuration
-DATASET_PATH = "./dataset_a"
-MODEL_PATH = "models/dungeon_model_v1.keras"
+DATASET_PATH = "./dataset_a_v3"
+MODEL_PATH = "models/dungeon_model_v3.keras"
 EMBEDDING_LAYER_NAME = "embedding_out"
 BATCH_SIZE = 32
 IMG_SIZE = (32, 32)
-CHROMA_PATH = "C:\\Users\\jchac\\JaredChancey\\Group-7-AIENG\\DungeonArchivistTeam7\\chroma"
+CHROMA_PATH = "./chroma"
 
 def load_embedding_model(model_path):
     """Load trained model and extract embedding layer"""

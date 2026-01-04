@@ -14,7 +14,7 @@ from sklearn.metrics import confusion_matrix
 SEED = 42
 IMG_SIZE = (32, 32)
 BATCH_SIZE = 32
-DATASET = "./dataset_a" 
+DATASET = "./Dataset_a_v3" 
 
 # Set seed for reproducibility
 keras.utils.set_random_seed(SEED)
@@ -24,6 +24,8 @@ def get_optimized_dataset(data_path):
     # Find image paths/labels
     path_obj = pathlib.Path(data_path)
     image_paths = sorted([str(p) for p in path_obj.rglob("*.png")])
+    if not image_paths:
+        raise ValueError(f"No .png images found in {data_path}. Check your path!")
     labels = []
     for path in image_paths:
         rel_p = pathlib.Path(path).relative_to(path_obj)
@@ -274,11 +276,11 @@ def run_training(data_path, optimizer, complex_model=True, log=False, save_model
     # Save Artifacts for Phase 2
 
     if save_model:
-        model.save("dungeon_model_v1.keras")
-        print(f"--- Model saved to dungeon_model_v1.keras ---")
+        model.save("./models/dungeon_model_v3.keras")
+        print(f"--- Model saved to dungeon_model_v3.keras ---")
         with open("labels.txt", "w") as f:
             for name in class_names:
                 f.write(f"{name}\n")
 
 if __name__ == "__main__":
-    run_training(DATASET, optimizer="adam")
+    run_training(DATASET, optimizer="adam", save_model=True)
