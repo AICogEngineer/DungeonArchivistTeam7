@@ -25,6 +25,7 @@ Confidence_Threshold = 50
 Model_Path = "models/dungeon_model_v3.keras"
 Embedding_Layer_Name = "embedding_out"
 
+
 LABEL_TO_CATEGORY = {
     # Dungeon subcategories
     "dungeon": "dungeon",
