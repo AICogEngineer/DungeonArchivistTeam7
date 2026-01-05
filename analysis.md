@@ -1,15 +1,15 @@
 # Dungeon Archivist: Phase 3 Analysis Report
 
-**Team Members:** Jared Chancey, David Barboza 
+**Team Members:** Jared Chancey, David Barboza   
 **Project:** The Dungeon Archivist - AI-Powered Asset Restoration
 
 ---
 
 ## Executive Summary
 
-Our game studio acquired 3,917 dungeon game assets renamed to random hashes (e.g., a7f3d9.png) with no folder structure—a complete "data swamp." We built The Dungeon Archivist using three datasets: Dataset A trained a CNN to generate 256-dimensional embeddings stored in ChromaDB; Dataset B was automatically sorted using L2 distance metric and weighted voting; Dataset C (instructor-provided) will validate generalization during live demo. Our vector database approach transformed chaos into a professionally organized 132-category library.
+Our game studio acquired 3,917 dungeon game assets renamed to random hashes (e.g., a7f3d9.png) with no folder structure—a complete "data swamp." We built The Dungeon Archivist using three datasets: Dataset A trained a CNN to generate 256-dimensional embeddings stored in ChromaDB; Dataset B was automatically sorted using L2 distance metric and weighted voting; Dataset C (instructor-provided) will validate generalization during live demo.
 
-**Key Achievement:** Successfully classified unlabeled images using ChromaDB with L2 distance metric and weighted voting from CNN embeddings.
+**Key Achievement:** Understanding of the process of classifing unlabeled images using ChromaDB with L2 distance metric and weighted voting from CNN embeddings.
 
 ---
 
@@ -124,21 +124,11 @@ We implemented a **conservative confidence threshold of 50.0** to prioritize cla
 
 **Dataset B Processing:**
 - Total images: 3,917
-- Successfully auto-sorted: 3,327 images 83%
+- Auto-sorted: 3,327 images 83%
 - Sent to manual review: 590 images 17%
 
 **Threshold Analysis:**
 - Confidence threshold: 50.0
-
-**Categories**
-Catagories:
-1. Dungeon
-2. Item
-3. Monster
-4. Player
-5. Effect
-6. Gui
-7. Misc
 
 ### Distance Observations
 
@@ -160,7 +150,7 @@ Our conservative threshold of 50.0 ensures only highly confident matches are aut
 - HNSW algorithm for fast similarity search
 - Easy integration with Python
 
-```
+
 
 **Storage:**
 - 6,029 embeddings from Dataset A
@@ -176,50 +166,52 @@ Our conservative threshold of 50.0 ensures only highly confident matches are aut
 
 ---
 
-## 6. Challenges & Solutions
+## 6. Challenges
 
-### Challenge 1: Nested Category Structure
-**Problem:** Dataset A has hierarchical folders (dungeon/altars/, dungeon/doors/)  
-**Solution:** Implemented nested folder creation in file handling to match Dataset A structure while preserving original chaos folder
+### Challenge 1: Small Dataset & Data Imbalance
+**Problem:** The starting dataset was very small with some categories containing very little data to train and validate on.  
+**Thoughts:** Merge parent folders to children folder with small amounts of data to train on. Even then, some datasets are overbearing (walls, floors, monsters) with large amounts of data compared to sparse categories (this will be a problem when learning to categorize later).
 
-### Challenge 2: Embedding Layer Extraction
-**Problem:** Needed to extract 256-D embeddings from trained model without classification layer  
-**Solution:** Built separate embedding model stopping at "embedding_out" layer using Keras Functional API
+### Challenge 2: Balancing Embedding Dimension vs Confidence Threshold
+**Problem:** Higher embedding dimensions allow the model to learn more data and recognize patterns, but also will require higher confidence threshold
+because embeddings are more spread out across higher dimensions.   
+**Thoughts:** Model training benefits (higher validation accuracy and lower validation loss) from larger embedding dimension, but high dimensions spread embeddings further in space. Set a threshold of 50.0 to balance auto-sorting at high dimensional space. Would be nice to follow up with a lower
+dimensional embedding to see if we could push confidence threshold lower and keep auto-sorting percentage similar.
 
-### Challenge 3: Confidence Threshold Selection
-**Problem:** Balancing automation rate vs. classification accuracy  
-**Solution:** Set conservative threshold of 50.0 to prioritize precision, accepting higher manual review volume
+### Challenge 3: Datasets Vary In Art and Perspective
+**Problem:** Between the three datasets, the art style and pespective of sprites varies wildly. This means additional data which our model has not trained on will have different patterns from the ones learned during training.   
+**Thoughts:** Given the previous challenges, this is just an additional hurdle which will affect the final outcome. This is especially concerning given we will train a model from our categorization of dataset b to then categorize dataset c. This will result in the errors propagating and the models becoming less reliable the more data we train on given we expect the categorization process to be flawed.
 
-### Challenge 4: Batch Efficiency
-**Problem:** Processing 3,917 images individually would be slow  
-**Solution:** Implemented batch processing (32 images/batch) with vectorized embedding generation and parallel ChromaDB queries
+### Challenge 4: Noise In Chaos Dataset From Backgrounds
+**Problem:** Sprites in the chaos dataset had backgrounds which added additional noise that our model was not trained to handle.  
+**Thoughts:** Use rembg library to remove background of chaos dataset sprites. This caused some of the sprites to be corrupted beyond recognition and led to them being categorized as walls or floors most of the time worsening the problem of data imbalance for categories. We were unable to use rembg on our training data because it would corrupt some data beyond recognition the gap between our model dataset and the chaos was also not solved (Note: using rembg on the chaos dataset did provide meaningful improvement in making embeddings closer allowing us to bring the confidence threshold from 5000 to 50 with similar results of auto-sorting percentage).
 
 ## 7. Key Findings
 
-### What Worked Well
+### What Worked Well  
 
-**Vector Database Approach:** Successfully found similar images even for unlabeled data  
+**Vector Database Approach:** Successfully found images even for unlabeled data  
 **Weighted Voting:** Robust against occasional mismatches in top-5 neighbors  
-**Confidence Threshold:** Prevented low-confidence errors by routing uncertain images to review  
+**Confidence Threshold:** Threshold for auto-sorting vs manual review worked as expected
 **Batch Processing:** Efficient handling of 3,917 images in around a minute  
 
-### Limitations
+### Limitations  
 
 **Distribution Shift:** Dataset B images differ from training data (high distances)  
 **Manual Review Required:** 17% of images needed human verification  
 **Category Imbalance:** Some rare categories had few training examples  
 **Background Noise:** With Dataset B there was too much background noise which made the accuracy of sorting lower
----
+
 
 ## 8. Conclusions
 
 ### Did It Work?
 
-**Yes.** The Vector Database approach successfully:
+**Technically Yes.** The Vector Database approach successfully:
 
 1. **Classified unlabeled images** using only visual similarity
 2. **Maintained high accuracy** through weighted voting and confidence thresholds
-3. **Preserved detailed categorization** across 132 subcategories
+3. **Preserved detailed categorization** across many subcategories
 4. **Processed efficiently** using batch operations and fast vector search
 
 ### Why This Approach Works
@@ -234,7 +226,7 @@ Our CNN learned to compress 32×32×3 (3,072 numbers) images into 256-dimensiona
 
 ---
 
-## 10. Phase 3: Expansion Analysis
+## 9. Phase 3: Expansion Analysis
 
 ### Retraining with Combined Dataset
 
@@ -245,7 +237,6 @@ Our CNN learned to compress 32×32×3 (3,072 numbers) images into 256-dimensiona
 **After (Retrained Model):**
 - Training data: 9,358 images (Dataset A + verified Dataset B)
 - Validation accuracy: 80%
-- Improvement: Went down 5%
 
 **Conclusion:**
 Did adding Dataset B improve performance? No because we ran into problems with the background causing noise on dataset b and that affected the accuracy of the model
@@ -260,7 +251,7 @@ In Phase 2, the system achieved:
 
 17% manual review, routed conservatively to prevent mislabeling
 
-Preservation of 132 fine-grained subcategories
+Preservation of subcategories
 
 Efficient processing via batch inference and fast nearest-neighbor search
 
