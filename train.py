@@ -14,7 +14,7 @@ from sklearn.metrics import confusion_matrix
 SEED = 42
 IMG_SIZE = (32, 32)
 BATCH_SIZE = 32
-DATASET = "./Dataset_a_v3" 
+DATASET = "./combined_dataset_manual" 
 
 # Set seed for reproducibility
 keras.utils.set_random_seed(SEED)
@@ -276,11 +276,8 @@ def run_training(data_path, optimizer, complex_model=True, log=False, save_model
     # Save Artifacts for Phase 2
 
     if save_model:
-        model.save("./models/dungeon_model_v3.keras")
+        model.save("./models/manual_model_v1.keras")
         print(f"--- Model saved to dungeon_model_v3.keras ---")
-        with open("labels.txt", "w") as f:
-            for name in class_names:
-                f.write(f"{name}\n")
 
 if __name__ == "__main__":
-    run_training(DATASET, optimizer="adam", save_model=True)
+    run_training(DATASET, optimizer="adam", log=True)

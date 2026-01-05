@@ -6,7 +6,7 @@ from tqdm import tqdm
 # --- Configuration ---
 ORIGINAL_DATASET = "./dataset_a_v3" 
 SORTED_CHAOS_DATA = "./restored_archive"           
-NEW_COMBINED_DATASET = "./combined_dataset_archivist" 
+NEW_COMBINED_DATASET = "./combined_dataset_manual" 
 
 def consolidate_datasets():
     # Convert to Path objects
