@@ -18,12 +18,12 @@ from PIL import Image
 # Configuration
 # Point this to your CLEANED data folder for best accuracy
 Sorting_Folder = "./dataset_c" 
-Chroma_path = "./chroma_manual"
-Restored_Folder = "./manual/restored_archive"
-Review_Folder = "./manual/review_pile"
+Chroma_path = "./chroma_archivist"
+Restored_Folder = "./archivist/restored_archive"
+Review_Folder = "./archivist/review_pile"
 Top_Matches = 5
 Confidence_Threshold = 50
-Model_Path = "models/manual_model_v1.keras"
+Model_Path = "models/archivist_model_v1.keras"
 Embedding_Layer_Name = "embedding_out"
 
 
