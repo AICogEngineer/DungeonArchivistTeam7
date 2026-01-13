@@ -1,7 +1,7 @@
 #  The main engine. 
 #  Scans a target folder.
 #  Queries Vector DB.
-#  COPIES files to sorted subfolders (Preserving the Chaos_Folder).
+#  COPIES files to sorted subfolders (Preserving the sorting_Folder).
 
 import os
 import shutil
@@ -17,13 +17,15 @@ from PIL import Image
 
 # Configuration
 # Point this to your CLEANED data folder for best accuracy
-Chaos_Folder = "./Dataset_B/chaos_data_cleaned" 
-Restored_Folder = "./restored_archive"
-Review_Folder = "./review_pile"
+Sorting_Folder = "./dataset_c" 
+Chroma_path = "./chroma_archivist"
+Restored_Folder = "./archivist/restored_archive"
+Review_Folder = "./archivist/review_pile"
 Top_Matches = 5
 Confidence_Threshold = 50
-Model_Path = "models/dungeon_model_v3.keras"
+Model_Path = "models/archivist_model_v1.keras"
 Embedding_Layer_Name = "embedding_out"
+
 
 
 LABEL_TO_CATEGORY = {
@@ -108,7 +110,7 @@ LABEL_TO_CATEGORY = {
 def connect_to_vector_db():
     """Connect to ChromaDB with L2 distance metric"""
     try:
-        client = chromadb.PersistentClient(path="./chroma")
+        client = chromadb.PersistentClient(path=Chroma_path)
         collection = client.get_collection(name="dungeondb")
         print(f"Connected to Vector DB (total vectors: {collection.count()})")
         return collection
@@ -222,13 +224,13 @@ def move_file(file_path, label):
     except Exception as e:
         print(f" Error copying {os.path.basename(file_path)}: {e}")
 
-def process_chaos_folder_batch(chaos_folder, embedding_model, collection, batch_size=32):
-    if not os.path.exists(chaos_folder):
-        raise FileNotFoundError(f"Chaos folder not found: {chaos_folder}")
+def process_sorting_folder_batch(sorting_folder, embedding_model, collection, batch_size=32):
+    if not os.path.exists(sorting_folder):
+        raise FileNotFoundError(f"Sorting folder not found: {sorting_folder}")
     
-    filenames = [f for f in os.listdir(chaos_folder) if f.lower().endswith(".png")]
+    filenames = [f for f in os.listdir(sorting_folder) if f.lower().endswith(".png")]
     if not filenames:
-        print("No PNG files found in chaos folder")
+        print("No PNG files found in sorting folder")
         return
 
     print(f"Found {len(filenames)} images to process")
@@ -238,7 +240,7 @@ def process_chaos_folder_batch(chaos_folder, embedding_model, collection, batch_
 
     for i in range(0, len(filenames), batch_size):
         batch_files = filenames[i:i + batch_size]
-        batch_paths = [os.path.join(chaos_folder, f) for f in batch_files]
+        batch_paths = [os.path.join(sorting_folder, f) for f in batch_files]
         print(f"Processing batch {i//batch_size + 1}/{total_batches}...", end=" ")
 
         images_batch, valid_paths = preprocess_images_batch(batch_paths)
@@ -273,7 +275,7 @@ def main():
     try:
         collection = connect_to_vector_db()
         model, embedding_model = load_archivist_model(Model_Path)
-        process_chaos_folder_batch(Chaos_Folder, embedding_model, collection)
+        process_sorting_folder_batch(Sorting_Folder, embedding_model, collection)
     except Exception as e:
         print(f"\n✗ Fatal error: {e}")
         raise
